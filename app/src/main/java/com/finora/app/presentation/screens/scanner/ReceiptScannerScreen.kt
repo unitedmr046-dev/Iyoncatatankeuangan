@@ -1,3 +1,4 @@
+import androidx.compose.foundation.clickable
 package com.finora.app.presentation.screens.scanner
 
 import android.net.Uri
