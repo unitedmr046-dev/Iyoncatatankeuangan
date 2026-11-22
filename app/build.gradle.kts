@@ -39,15 +39,9 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             val keystoreFile = rootProject.file("release.keystore")
-            signingConfig = if (keystoreFile.exists())
-                signingConfigs.getByName("release")
-            else
-                signingConfigs.getByName("debug")
+            signingConfig = if (keystoreFile.exists()) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
 
@@ -82,6 +76,7 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
 
     implementation(libs.navigation.compose)
+    implementation(libs.accompanist.permissions)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
@@ -92,4 +87,12 @@ dependencies {
     ksp(libs.hilt.compiler)
 
     implementation(libs.kotlinx.coroutines.android)
+
+    // Fitur Scan Struk & Chart
+    implementation(libs.camerax.core)
+    implementation(libs.camerax.camera2)
+    implementation(libs.camerax.lifecycle)
+    implementation(libs.camerax.view)
+    implementation(libs.mlkit.text)
+    implementation(libs.vico.compose)
 }
