@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -27,7 +28,6 @@ fun AddTransactionScreen(
     var selectedWalletId by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("Makanan") }
 
-    // Kalau ada hasil scan, otomatis masukin ke field amount
     LaunchedEffect(scannedAmount) {
         if (scannedAmount != null) {
             amount = scannedAmount.toLong().toString()
@@ -48,8 +48,7 @@ fun AddTransactionScreen(
             FilterChip(selected = selectedType == "income", onClick = { selectedType = "income" }, label = { Text("Pemasukan") })
         }
 
-        // Field Amount dengan Tombol Scan
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = amount, onValueChange = { amount = it },
                 label = { Text("Jumlah") },

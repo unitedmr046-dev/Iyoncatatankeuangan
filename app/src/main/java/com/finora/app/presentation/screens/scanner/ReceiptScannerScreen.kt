@@ -1,4 +1,3 @@
-import androidx.compose.foundation.clickable
 package com.finora.app.presentation.screens.scanner
 
 import android.net.Uri
@@ -9,6 +8,7 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -54,7 +54,7 @@ fun ReceiptScannerScreen(
             onImageCaptured = { uri ->
                 viewModel.processImage(context, uri) { amount ->
                     if (amount != null) onAmountScanned(amount)
-                    else onBack() // Gagal baca, balik ke form
+                    else onBack()
                 }
             }
         )
@@ -106,7 +106,6 @@ fun CameraContent(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Tombol Close
         IconButton(
             onClick = onBack,
             modifier = Modifier.padding(24.dp).align(Alignment.TopStart)
@@ -114,7 +113,6 @@ fun CameraContent(
             Icon(Icons.Default.Close, contentDescription = "Tutup", tint = Color.White)
         }
 
-        // Tombol Jepret
         if (!isLoading) {
             Box(
                 modifier = Modifier
@@ -133,9 +131,7 @@ fun CameraContent(
                                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                                     onImageCaptured(Uri.fromFile(file))
                                 }
-                                override fun onError(exception: ImageCaptureException) {
-                                    // Handle error
-                                }
+                                override fun onError(exception: ImageCaptureException) {}
                             }
                         )
                     }
