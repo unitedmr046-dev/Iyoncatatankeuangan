@@ -66,6 +66,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.activity:activity-compose:1.9.3")
 
     // Compose
@@ -87,9 +88,9 @@ dependencies {
     ksp("androidx.room:room-compiler:2.6.1")
 
     // Hilt
-    implementation("com.google.dagger:hilt-android:2.52")
+    implementation("com.google.dagger:hilt-android:2.53.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
-    ksp("com.google.dagger:hilt-compiler:2.52")
+    ksp("com.google.dagger:hilt-compiler:2.53.1")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
@@ -104,5 +105,5 @@ dependencies {
     implementation("com.google.mlkit:text-recognition:16.0.1")
 
     // Vico Chart
-    implementation("com.patrykandpatrick.vico:compose-m3:2.0.0-beta.2")
+    implementation("com.patrykandpatrick.vico:compose-m3:2.0.3")
 }

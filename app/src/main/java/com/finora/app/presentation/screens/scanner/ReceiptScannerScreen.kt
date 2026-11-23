@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
@@ -19,11 +20,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -38,7 +40,8 @@ fun ReceiptScannerScreen(
 ) {
     val context = LocalContext.current
     val cameraPermissionState = rememberPermissionState(android.Manifest.permission.CAMERA)
-    val isLoading by viewModel.isLoading.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         if (!cameraPermissionState.status.isGranted) {
@@ -48,28 +51,52 @@ fun ReceiptScannerScreen(
 
     if (cameraPermissionState.status.isGranted) {
         CameraContent(
-            onAmountScanned = onAmountScanned,
             onBack = onBack,
             isLoading = isLoading,
+            errorMessage = errorMessage,
+            onCaptureError = { errorMessage = it },
             onImageCaptured = { uri ->
+                errorMessage = null
                 viewModel.processImage(context, uri) { amount ->
-                    if (amount != null) onAmountScanned(amount)
-                    else onBack()
+                    if (amount != null) {
+                        onAmountScanned(amount)
+                    } else {
+                        errorMessage = "Nominal tidak terbaca. Coba foto ulang lebih jelas."
+                    }
                 }
             }
         )
     } else {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Izin kamera dibutuhkan untuk scan struk.")
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Izin kamera dibutuhkan untuk scan struk.",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = { cameraPermissionState.launchPermissionRequest() }) {
+                Text("Berikan Izin Kamera")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(onClick = onBack) {
+                Text("Kembali")
+            }
         }
     }
 }
 
 @Composable
-fun CameraContent(
-    onAmountScanned: (Double) -> Unit,
+private fun CameraContent(
     onBack: () -> Unit,
     isLoading: Boolean,
+    errorMessage: String?,
+    onCaptureError: (String) -> Unit,
     onImageCaptured: (Uri) -> Unit
 ) {
     val context = LocalContext.current
@@ -87,18 +114,19 @@ fun CameraContent(
                     val preview = Preview.Builder().build().also {
                         it.setSurfaceProvider(previewView.surfaceProvider)
                     }
-                    imageCapture = ImageCapture.Builder().build()
-                    
+                    val capture = ImageCapture.Builder().build()
+                    imageCapture = capture
+
                     try {
                         cameraProvider.unbindAll()
                         cameraProvider.bindToLifecycle(
                             lifecycleOwner,
                             CameraSelector.DEFAULT_BACK_CAMERA,
                             preview,
-                            imageCapture
+                            capture
                         )
                     } catch (e: Exception) {
-                        e.printStackTrace()
+                        onCaptureError("Gagal membuka kamera: ${e.localizedMessage ?: "Unknown"}")
                     }
                 }, ContextCompat.getMainExecutor(ctx))
                 previewView
@@ -108,37 +136,70 @@ fun CameraContent(
 
         IconButton(
             onClick = onBack,
-            modifier = Modifier.padding(24.dp).align(Alignment.TopStart)
+            modifier = Modifier
+                .statusBarsPadding()
+                .padding(16.dp)
+                .align(Alignment.TopStart)
+                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
         ) {
             Icon(Icons.Default.Close, contentDescription = "Tutup", tint = Color.White)
+        }
+
+        if (errorMessage != null) {
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 72.dp, start = 24.dp, end = 24.dp)
+            ) {
+                Text(
+                    text = errorMessage,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+            }
         }
 
         if (!isLoading) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 48.dp)
+                    .navigationBarsPadding()
+                    .padding(bottom = 40.dp)
                     .size(72.dp)
                     .background(Color.White, CircleShape)
                     .clickable {
+                        val capture = imageCapture ?: return@clickable
                         val file = File(context.cacheDir, "receipt_${System.currentTimeMillis()}.jpg")
                         val outputOptions = ImageCapture.OutputFileOptions.Builder(file).build()
-                        
-                        imageCapture?.takePicture(
+
+                        capture.takePicture(
                             outputOptions,
                             ContextCompat.getMainExecutor(context),
                             object : ImageCapture.OnImageSavedCallback {
                                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                                     onImageCaptured(Uri.fromFile(file))
                                 }
-                                override fun onError(exception: ImageCaptureException) {}
+
+                                override fun onError(exception: ImageCaptureException) {
+                                    file.delete()
+                                    onCaptureError("Gagal mengambil foto struk.")
+                                }
                             }
                         )
                     }
             )
         } else {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = Color.White)
-            Text("Membaca struk...", color = Color.White, modifier = Modifier.align(Alignment.Center).padding(top = 64.dp))
+            Column(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                CircularProgressIndicator(color = Color.White)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Membaca struk...", color = Color.White)
+            }
         }
     }
 }
