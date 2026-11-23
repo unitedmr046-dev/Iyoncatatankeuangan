@@ -1,9 +1,6 @@
-# Room entities
 -keep class com.finora.app.data.local.entity.** { *; }
-
-# Hilt generated
+-keep class com.finora.app.domain.model.** { *; }
 -keep class dagger.hilt.** { *; }
 -keep class javax.inject.** { *; }
-
-# Kotlin metadata
 -keepattributes *Annotation*, InnerClasses, Signature, Exceptions
+-dontwarn com.google.errorprone.annotations.**

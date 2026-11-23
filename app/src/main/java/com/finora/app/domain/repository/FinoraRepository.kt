@@ -13,7 +13,9 @@ interface FinoraRepository {
     fun getTransactions(): Flow<List<Transaction>>
     fun getTransactionsByWallet(walletId: String): Flow<List<Transaction>>
     suspend fun insertTransaction(transaction: Transaction)
+    suspend fun updateTransaction(transaction: Transaction)
     suspend fun deleteTransaction(transaction: Transaction)
+    suspend fun deleteTransactionsByWallet(walletId: String)
 
     // Budgets
     fun getBudgetsByMonth(month: String): Flow<List<Budget>>

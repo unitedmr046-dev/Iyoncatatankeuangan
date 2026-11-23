@@ -8,6 +8,7 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -41,7 +42,7 @@ fun ReceiptScannerScreen(
     val context = LocalContext.current
     val cameraPermissionState = rememberPermissionState(android.Manifest.permission.CAMERA)
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         if (!cameraPermissionState.status.isGranted) {
@@ -54,38 +55,31 @@ fun ReceiptScannerScreen(
             onBack = onBack,
             isLoading = isLoading,
             errorMessage = errorMessage,
-            onCaptureError = { errorMessage = it },
+            onDismissError = { viewModel.clearError() },
             onImageCaptured = { uri ->
-                errorMessage = null
                 viewModel.processImage(context, uri) { amount ->
-                    if (amount != null) {
-                        onAmountScanned(amount)
-                    } else {
-                        errorMessage = "Nominal tidak terbaca. Coba foto ulang lebih jelas."
-                    }
+                    onAmountScanned(amount)
                 }
             }
         )
     } else {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .padding(24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "Izin kamera dibutuhkan untuk scan struk.",
-                style = MaterialTheme.typography.titleMedium
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = { cameraPermissionState.launchPermissionRequest() }) {
-                Text("Berikan Izin Kamera")
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            TextButton(onClick = onBack) {
-                Text("Kembali")
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Izin kamera dibutuhkan untuk memindai struk belanja.")
+                Button(onClick = { cameraPermissionState.launchPermissionRequest() }) {
+                    Text("Izinkan Kamera")
+                }
+                TextButton(onClick = onBack) {
+                    Text("Kembali")
+                }
             }
         }
     }
@@ -96,41 +90,53 @@ private fun CameraContent(
     onBack: () -> Unit,
     isLoading: Boolean,
     errorMessage: String?,
-    onCaptureError: (String) -> Unit,
+    onDismissError: () -> Unit,
     onImageCaptured: (Uri) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    val previewView = remember { PreviewView(context) }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    DisposableEffect(lifecycleOwner) {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+        val executor = ContextCompat.getMainExecutor(context)
+
+        cameraProviderFuture.addListener({
+            val cameraProvider = cameraProviderFuture.get()
+            val preview = Preview.Builder().build().also {
+                it.surfaceProvider = previewView.surfaceProvider
+            }
+            val capture = ImageCapture.Builder()
+                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                .build()
+            imageCapture = capture
+
+            try {
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(
+                    lifecycleOwner,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    preview,
+                    capture
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }, executor)
+
+        onDispose {
+            runCatching { cameraProviderFuture.get().unbindAll() }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
         AndroidView(
-            factory = { ctx ->
-                val previewView = PreviewView(ctx)
-                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-
-                cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build().also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
-                    val capture = ImageCapture.Builder().build()
-                    imageCapture = capture
-
-                    try {
-                        cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            CameraSelector.DEFAULT_BACK_CAMERA,
-                            preview,
-                            capture
-                        )
-                    } catch (e: Exception) {
-                        onCaptureError("Gagal membuka kamera: ${e.localizedMessage ?: "Unknown"}")
-                    }
-                }, ContextCompat.getMainExecutor(ctx))
-                previewView
-            },
+            factory = { previewView },
             modifier = Modifier.fillMaxSize()
         )
 
@@ -140,7 +146,6 @@ private fun CameraContent(
                 .statusBarsPadding()
                 .padding(16.dp)
                 .align(Alignment.TopStart)
-                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
         ) {
             Icon(Icons.Default.Close, contentDescription = "Tutup", tint = Color.White)
         }
@@ -152,12 +157,14 @@ private fun CameraContent(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
-                    .padding(top = 72.dp, start = 24.dp, end = 24.dp)
+                    .padding(top = 64.dp, start = 20.dp, end = 20.dp)
+                    .clickable { onDismissError() }
             ) {
                 Text(
                     text = errorMessage,
                     color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
         }
@@ -167,15 +174,17 @@ private fun CameraContent(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(bottom = 40.dp)
-                    .size(72.dp)
+                    .padding(bottom = 36.dp)
+                    .size(74.dp)
+                    .border(4.dp, Color.White.copy(alpha = 0.7f), CircleShape)
+                    .padding(6.dp)
                     .background(Color.White, CircleShape)
                     .clickable {
-                        val capture = imageCapture ?: return@clickable
+                        onDismissError()
                         val file = File(context.cacheDir, "receipt_${System.currentTimeMillis()}.jpg")
                         val outputOptions = ImageCapture.OutputFileOptions.Builder(file).build()
 
-                        capture.takePicture(
+                        imageCapture?.takePicture(
                             outputOptions,
                             ContextCompat.getMainExecutor(context),
                             object : ImageCapture.OnImageSavedCallback {
@@ -185,7 +194,6 @@ private fun CameraContent(
 
                                 override fun onError(exception: ImageCaptureException) {
                                     file.delete()
-                                    onCaptureError("Gagal mengambil foto struk.")
                                 }
                             }
                         )

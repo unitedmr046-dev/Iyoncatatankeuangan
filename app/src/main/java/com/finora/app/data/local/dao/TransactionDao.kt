@@ -20,4 +20,7 @@ interface TransactionDao {
 
     @Delete
     suspend fun deleteTransaction(transaction: TransactionEntity)
+
+    @Query("DELETE FROM transactions WHERE walletId = :walletId OR toWalletId = :walletId")
+    suspend fun deleteTransactionsByWallet(walletId: String)
 }

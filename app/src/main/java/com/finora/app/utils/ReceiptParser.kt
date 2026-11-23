@@ -1,82 +1,134 @@
 package com.finora.app.utils
 
 object ReceiptParser {
+
+    private val priorityKeywords = listOf(
+        "grand total",
+        "total bayar",
+        "total belanja",
+        "total tagihan",
+        "total harga",
+        "jumlah bayar",
+        "amount due",
+        "total pembayaran",
+        "total",
+        "netto",
+        "tunai"
+    )
+
+    private val ignoredLineKeywords = listOf(
+        "subtotal",
+        "sub total",
+        "sub-total",
+        "qty",
+        "item",
+        "kembali",
+        "kembalian",
+        "change",
+        "diskon",
+        "discount",
+        "hemat",
+        "ppn",
+        "pajak",
+        "tax",
+        "npwp",
+        "telp",
+        "hp",
+        "wa",
+        "no.",
+        "nota",
+        "struk",
+        "kasir"
+    )
+
+    private val numberRegex = Regex("""(?i)(?:rp\.?|idr)?\s*(\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?)""")
+
     fun parseAmount(text: String): Double? {
-        val lines = text.lines()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .asReversed()
+        if (text.isBlank()) return null
+        val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
 
-        val primaryKeywords = listOf("grand total", "total belanja", "total bayar", "total tagihan", "total")
-        for (line in lines) {
-            val lower = line.lowercase()
-            if (lower.contains("subtotal")) continue
-            if (primaryKeywords.any { lower.contains(it) }) {
-                extractLastNumber(line)?.let { return it }
-            }
-        }
-
-        val secondaryKeywords = listOf("jumlah", "amount", "subtotal")
-        for (line in lines) {
-            val lower = line.lowercase()
-            if (secondaryKeywords.any { lower.contains(it) }) {
-                extractLastNumber(line)?.let { return it }
-            }
-        }
-
-        val candidates = Regex("""\d[\d.,]*""").findAll(text)
-            .mapNotNull { match ->
-                val raw = match.value
-                // Abaikan nomor HP / kode panjang tanpa pemisah ribuan
-                if (raw.startsWith("0") && raw.length > 4 && !raw.contains(".") && !raw.contains(",")) {
-                    null
-                } else {
-                    normalizeNumber(raw)
+        // 1. Cari baris yang mengandung kata kunci total (prioritas tertinggi dulu)
+        for (keyword in priorityKeywords) {
+            val matchingLines = lines.filter { line ->
+                val lower = line.lowercase()
+                lower.contains(keyword) && ignoredLineKeywords.none { ignored ->
+                    ignored != keyword && lower.contains(ignored)
                 }
             }
-            .filter { it in 100.0..100_000_000.0 }
-            .toList()
+            for (line in matchingLines.asReversed()) {
+                val amount = extractLastReasonableNumber(line)
+                if (amount != null && amount >= 100.0) {
+                    return amount
+                }
+            }
+        }
+
+        // 2. Fallback: cari angka berformat uang yang paling masuk akal
+        val candidates = lines
+            .filter { line ->
+                val lower = line.lowercase()
+                ignoredLineKeywords.none { lower.contains(it) }
+            }
+            .flatMap { line ->
+                numberRegex.findAll(line).mapNotNull { match ->
+                    parseLocalizedNumber(match.groupValues[1])
+                }.toList()
+            }
+            .filter { it in 500.0..500_000_000.0 }
 
         return candidates.maxOrNull()
     }
 
-    private fun extractLastNumber(line: String): Double? {
-        val matches = Regex("""\d[\d.,]*""").findAll(line).toList()
-        return matches.asReversed().firstNotNullOfOrNull { normalizeNumber(it.value) }
+    private fun extractLastReasonableNumber(line: String): Double? {
+        val matches = numberRegex.findAll(line).toList()
+        return matches.asReversed()
+            .mapNotNull { parseLocalizedNumber(it.groupValues[1]) }
+            .firstOrNull { it in 100.0..500_000_000.0 }
     }
 
-    private fun normalizeNumber(raw: String): Double? {
-        val trimmed = raw.trim().trimEnd('.', ',')
-        if (trimmed.isEmpty()) return null
+    internal fun parseLocalizedNumber(raw: String): Double? {
+        val cleaned = raw.trim()
+        if (cleaned.isEmpty()) return null
 
-        val hasDot = trimmed.contains('.')
-        val hasComma = trimmed.contains(',')
-
-        val normalized = when {
-            hasDot && hasComma -> {
-                if (trimmed.lastIndexOf(',') > trimmed.lastIndexOf('.')) {
-                    trimmed.replace(".", "").replace(",", ".")
-                } else {
-                    trimmed.replace(",", "")
-                }
-            }
-            hasDot -> {
-                if (Regex("""^\d{1,3}(\.\d{3})+$""").matches(trimmed) || trimmed.count { it == '.' } > 1) {
-                    trimmed.replace(".", "")
-                } else {
-                    trimmed
-                }
-            }
-            hasComma -> {
-                if (Regex("""^\d{1,3}(,\d{3})+$""").matches(trimmed) || trimmed.count { it == ',' } > 1) {
-                    trimmed.replace(",", "")
-                } else {
-                    trimmed.replace(",", ".")
-                }
-            }
-            else -> trimmed
+        // Tolak deretan digit terlalu panjang tanpa pemisah (barcode / nomor HP)
+        if (!cleaned.contains('.') && !cleaned.contains(',') && cleaned.length >= 10) {
+            return null
         }
 
-        return normalized.toDoubleOrNull()?.takeIf { it > 0.0 }
+        val lastDot = cleaned.lastIndexOf('.')
+        val lastComma = cleaned.lastIndexOf(',')
+
+        val normalized = when {
+            lastDot >= 0 && lastComma >= 0 -> {
+                if (lastComma > lastDot) {
+                    cleaned.replace(".", "").replace(",", ".")
+                } else {
+                    cleaned.replace(",", "")
+                }
+            }
+            lastDot >= 0 -> {
+                val afterDot = cleaned.substring(lastDot + 1)
+                if (afterDot.length == 3) {
+                    cleaned.replace(".", "")
+                } else if (afterDot.length <= 2 && cleaned.count { it == '.' } == 1) {
+                    cleaned
+                } else {
+                    cleaned.replace(".", "")
+                }
+            }
+            lastComma >= 0 -> {
+                val afterComma = cleaned.substring(lastComma + 1)
+                if (afterComma.length == 3) {
+                    cleaned.replace(",", "")
+                } else if (afterComma.length <= 2 && cleaned.count { it == ',' } == 1) {
+                    cleaned.replace(",", ".")
+                } else {
+                    cleaned.replace(",", "")
+                }
+            }
+            else -> cleaned
+        }
+
+        return normalized.toDoubleOrNull()
     }
 }

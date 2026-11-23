@@ -21,6 +21,6 @@ object DatabaseModule {
             context,
             FinoraDatabase::class.java,
             "finora_database"
-        ).fallbackToDestructiveMigration().build()
+        ).fallbackToDestructiveMigration(dropAllTables = true).build()
     }
 }

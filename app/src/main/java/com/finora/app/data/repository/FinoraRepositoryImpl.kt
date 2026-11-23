@@ -24,32 +24,40 @@ class FinoraRepositoryImpl @Inject constructor(
     override suspend fun deleteWallet(wallet: Wallet) =
         db.walletDao().deleteWallet(WalletEntity(wallet.id, wallet.name, wallet.type, wallet.initialBalance))
 
-
     // === TRANSACTIONS ===
     override fun getTransactions(): Flow<List<Transaction>> =
         db.transactionDao().getAllTransactions().map { entities ->
             entities.map {
-                Transaction(it.id, it.type, it.amount, it.walletId, it.toWalletId, it.category, it.subcategory, it.note, it.date, it.paymentMethod, it.receiptUri, it.recurring)
+                Transaction(
+                    it.id, it.type, it.amount, it.walletId, it.toWalletId,
+                    it.category, it.subcategory, it.note, it.date,
+                    it.paymentMethod, it.receiptUri, it.recurring
+                )
             }
         }
 
     override fun getTransactionsByWallet(walletId: String): Flow<List<Transaction>> =
         db.transactionDao().getTransactionsByWallet(walletId).map { entities ->
             entities.map {
-                Transaction(it.id, it.type, it.amount, it.walletId, it.toWalletId, it.category, it.subcategory, it.note, it.date, it.paymentMethod, it.receiptUri, it.recurring)
+                Transaction(
+                    it.id, it.type, it.amount, it.walletId, it.toWalletId,
+                    it.category, it.subcategory, it.note, it.date,
+                    it.paymentMethod, it.receiptUri, it.recurring
+                )
             }
         }
 
     override suspend fun insertTransaction(transaction: Transaction) =
-        db.transactionDao().insertTransaction(
-            TransactionEntity(transaction.id, transaction.type, transaction.amount, transaction.walletId, transaction.toWalletId, transaction.category, transaction.subcategory, transaction.note, transaction.date, transaction.paymentMethod, transaction.receiptUri, transaction.recurring)
-        )
+        db.transactionDao().insertTransaction(transaction.toEntity())
+
+    override suspend fun updateTransaction(transaction: Transaction) =
+        db.transactionDao().updateTransaction(transaction.toEntity())
 
     override suspend fun deleteTransaction(transaction: Transaction) =
-        db.transactionDao().deleteTransaction(
-            TransactionEntity(transaction.id, transaction.type, transaction.amount, transaction.walletId, transaction.toWalletId, transaction.category, transaction.subcategory, transaction.note, transaction.date, transaction.paymentMethod, transaction.receiptUri, transaction.recurring)
-        )
+        db.transactionDao().deleteTransaction(transaction.toEntity())
 
+    override suspend fun deleteTransactionsByWallet(walletId: String) =
+        db.transactionDao().deleteTransactionsByWallet(walletId)
 
     // === BUDGETS ===
     override fun getBudgetsByMonth(month: String): Flow<List<Budget>> =
@@ -62,7 +70,6 @@ class FinoraRepositoryImpl @Inject constructor(
 
     override suspend fun deleteBudget(budget: Budget) =
         db.budgetDao().deleteBudget(BudgetEntity(budget.id, budget.month, budget.category, budget.limitAmount))
-
 
     // === GOALS ===
     override fun getGoals(): Flow<List<Goal>> =
@@ -79,7 +86,6 @@ class FinoraRepositoryImpl @Inject constructor(
     override suspend fun deleteGoal(goal: Goal) =
         db.goalDao().deleteGoal(GoalEntity(goal.id, goal.name, goal.targetAmount, goal.savedAmount, goal.deadline))
 
-
     // === BILLS ===
     override fun getBills(): Flow<List<Bill>> =
         db.billDao().getAllBills().map { entities ->
@@ -94,4 +100,9 @@ class FinoraRepositoryImpl @Inject constructor(
 
     override suspend fun deleteBill(bill: Bill) =
         db.billDao().deleteBill(BillEntity(bill.id, bill.name, bill.amount, bill.dueDate, bill.recurring, bill.isPaid))
+
+    private fun Transaction.toEntity() = TransactionEntity(
+        id, type, amount, walletId, toWalletId, category, subcategory,
+        note, date, paymentMethod, receiptUri, recurring
+    )
 }

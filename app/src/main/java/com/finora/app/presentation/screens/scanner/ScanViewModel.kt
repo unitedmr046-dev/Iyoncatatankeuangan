@@ -21,30 +21,44 @@ class ScanViewModel @Inject constructor() : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
 
-    fun processImage(context: Context, uri: Uri, onResult: (Double?) -> Unit) {
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage = _errorMessage.asStateFlow()
+
+    fun clearError() {
+        _errorMessage.value = null
+    }
+
+    fun processImage(context: Context, uri: Uri, onAmountFound: (Double) -> Unit) {
         _isLoading.value = true
+        _errorMessage.value = null
         try {
             val image = InputImage.fromFilePath(context, uri)
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
                     _isLoading.value = false
-                    onResult(ReceiptParser.parseAmount(visionText.text))
+                    deleteTempFile(uri)
+                    val amount = ReceiptParser.parseAmount(visionText.text)
+                    if (amount != null) {
+                        onAmountFound(amount)
+                    } else {
+                        _errorMessage.value = "Nominal total tidak terbaca. Pastikan struk terlihat jelas lalu coba lagi."
+                    }
                 }
                 .addOnFailureListener {
                     _isLoading.value = false
-                    onResult(null)
-                }
-                .addOnCompleteListener {
-                    if (uri.scheme == "file") {
-                        uri.path?.let { File(it).delete() }
-                    }
+                    deleteTempFile(uri)
+                    _errorMessage.value = "Gagal memproses gambar struk. Silakan coba lagi."
                 }
         } catch (e: Exception) {
             _isLoading.value = false
-            if (uri.scheme == "file") {
-                uri.path?.let { File(it).delete() }
-            }
-            onResult(null)
+            deleteTempFile(uri)
+            _errorMessage.value = "Tidak dapat membuka gambar struk."
+        }
+    }
+
+    private fun deleteTempFile(uri: Uri) {
+        uri.path?.let { path ->
+            runCatching { File(path).delete() }
         }
     }
 
